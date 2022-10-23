@@ -110,19 +110,6 @@ void setup() {
   Serial.printf("Run on Core : %d @ %d MHz\n", xPortGetCoreID(), ESP.getCpuFreqMHz());
   Serial.printf("Sketch : %d ; Free : %d\n", ESP.getSketchSize(), ESP.getFreeSketchSpace());
 
-  uint64_t mac;
-  uint8_t *pmac;
-  mac = ESP.getEfuseMac();
-  pmac = (uint8_t*)&mac;
-  Serial.print("MAC : ");
-  for (int i = 0; i < 6; i++) {
-    Serial.printf("%02X", *pmac++);
-    if (i < 5) {
-      Serial.print(":");
-    }
-  }
-  Serial.println("");
-
   // Init Display
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) {  // SSD1306_SWITCHCAPVCC generate display voltage from 3.3V internally
     Serial.println(F("SSD1306 allocation failed"));
