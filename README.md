@@ -10,8 +10,13 @@ In dieser Demo werden keine Sensoren verwendet. Um den Code so übersichtlich wi
 ## Bibliothek
 
 https://github.com/mcci-catena/arduino-lorawan
+https://github.com/mcci-catena/arduino-lmic
 
 ## Daten Komprimieren
+
+LoRaWAN ist darauf ausgelegt möglichst energiesparend um bei Batteriebetrieb lange Laufzeiten zu ermöglichen. Das setzt voraus, dass die Datenpakete so kurz wie möglich sind. Außerdem gibt es auch Beschränkungen die Funk-Frequenzbänder nicht zu lange zu belegen, damit diese auch von anderen Geräten genutzt werden können.
+
+Bei einem Temperatur-Sensor ist es z.B. nicht nötig einen "float"-Wert mit 4 Byte Länge zu senden. Die LMIC-Bibliothek bietet dafür z.B. den Pseudo-Datentyp "sflt16" der nur 2 Byte lang ist. Die Genauigkeit ist für die allermeisten Temperaturmessungen ausreichend. Dieser Datentyp kann aber nur Werte zwischen -1,0 und +1,0 annehem. Deswegen wird die Temperatur vor dem kodieren in sflt16 durch 100 geteilt und nach dem dekodieren wieder mit 100 multipliziert. So können Temperaturen von -100°C bis +100°C übertragen werden.
 
 https://github.com/openwave-co-jp/arduino-lmic-master-for-LG01-JP/blob/master/README.md#encoding-utilities
 
