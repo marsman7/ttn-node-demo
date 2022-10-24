@@ -21,6 +21,8 @@
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
 //-----------------------------------------------------------------------------
+#define LORA_TX_INTERVAL    60
+
 // LoRa SX1276
 #define _lora_sclk 5
 #define _lora_miso 19
@@ -38,9 +40,15 @@
 //-----------------------------------------------------------------------------
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+#ifndef OTAA
 void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
+#else
+void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
+void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
+void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16);}
+#endif
 
 static osjob_t sendjob;
 
@@ -135,7 +143,11 @@ void setup() {
   initGauge(humidityGauge);
 
   drawGauge(temperaturGauge, (char *)"Demo", ALIGN_CENTER);
-  drawGauge(humidityGauge, (char *)"Node");
+#ifndef OTAA
+  drawGauge(humidityGauge, (char *)"ABP", ALIGN_CENTER);
+#else
+  drawGauge(humidityGauge, (char *)"OTAA", ALIGN_CENTER);
+#endif
 
   // Init ADC for measuring the battery voltage and internal ADC Calibrierung
   esp_adc_cal_characteristics_t adc_chars;
@@ -165,11 +177,9 @@ void setup() {
   os_init();
   LMIC_reset();
 
-  uint8_t appskey[sizeof(APPSKEY)];
-  uint8_t nwkskey[sizeof(NWKSKEY)];
-  memcpy_P(appskey, APPSKEY, sizeof(APPSKEY));
-  memcpy_P(nwkskey, NWKSKEY, sizeof(NWKSKEY));
-  LMIC_setSession(0x13, DEVADDR, nwkskey, appskey);
+#ifndef OTAA
+  LMIC_setSession(0x13, DEVADDR, (xref2u1_t)&NWKSKEY, (xref2u1_t)&APPSKEY);
+#endif
 
   // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   // Die Region muss in der platformio.ini eingestellt werden
@@ -195,24 +205,19 @@ void setup() {
   LMIC.dn2Dr = DR_SF9;          // TTN uses SF9 for its RX2 window.
   LMIC_setDrTxpow(DR_SF7, 16);  // Set data rate and transmit power for uplink
 
-  // Start job
+#ifndef OTAA
+  // Start first message sending
   msg_send_to_ttn(&sendjob);
+#else
+  // Start joining and key exchange
+  LMIC_startJoining ();
+#endif
 
   batteryTimer = millis();
 }
 
 //-----------------------------------------------------------------------------
 void loop() {
-  //digitalWrite(LED_PIN, led_status);
-  unsigned long now;
-  now = millis();
-  if ((now & 512) != 0) {
-    digitalWrite(BUILTIN_LED, HIGH);
-  }
-  else {
-    digitalWrite(BUILTIN_LED, LOW);
-  }
-
   if (batteryTimer < millis()) {
     char textBuffer[16];
 
@@ -242,6 +247,10 @@ void msg_send_to_ttn(osjob_t* j) {
     lorapacket.data.pressure    = LMIC_f2uflt16((float)1003 / 1100);   // Bereich 950mbar - 1060mbar; 5000m Höhe 53,53%
     lorapacket.data.voltage     = LMIC_f2uflt16(batteryVoltage / 6);  // Bereich 2,5V - 5,0V
     
+    Serial.printf("%2.2f V\n", batteryVoltage);
+
+    Serial.printf("Sequence no up/dn : %d / %d\n", LMIC.seqnoUp, LMIC.seqnoDn);
+
     Serial.printf("RAW Data : | %3d | ", sizeof(lorapacket.buffer));
     for (int i=0; i < sizeof(lorapacket.buffer); i++) {
       Serial.printf("%2x ", lorapacket.buffer[i]);
@@ -260,8 +269,7 @@ void msg_send_to_ttn(osjob_t* j) {
 
 //-----------------------------------------------------------------------------
 void onEvent (ev_t ev) {
-  Serial.print(os_getTime());
-  Serial.print(": ");
+  Serial.printf("%09d : ", os_getTime());
   switch (ev) {
     case EV_SCAN_TIMEOUT:
       Serial.println(F("EV_SCAN_TIMEOUT"));
@@ -280,6 +288,38 @@ void onEvent (ev_t ev) {
       break;
     case EV_JOINED:
       Serial.println(F("EV_JOINED"));
+#ifdef OTAA
+      {
+        u4_t netid = 0;
+        devaddr_t devaddr = 0;
+        u1_t nwkKey[16];
+        u1_t artKey[16];
+        LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
+        Serial.printf("netid: %d \n", netid);
+        Serial.printf("devaddr: %04x\n", devaddr);
+        Serial.print("AppSKey: ");
+        for (size_t i=0; i<sizeof(artKey); ++i) {
+          if (i != 0)
+            Serial.print("-");
+          Serial.printf("%02x", artKey[i]);
+        }
+        Serial.println("");
+        Serial.print("NwkSKey: ");
+        for (size_t i=0; i<sizeof(nwkKey); ++i) {
+          if (i != 0)
+            Serial.print("-");
+          Serial.printf("%02x", nwkKey[i]);
+        }
+        Serial.println();
+
+        drawGauge(humidityGauge, (char *)"joined");
+
+        msg_send_to_ttn(&sendjob);
+      }
+#endif
+      break;
+    case EV_JOIN_TXCOMPLETE:
+      Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
       break;
     case EV_JOIN_FAILED:
       Serial.println(F("EV_JOIN_FAILED"));
@@ -288,16 +328,14 @@ void onEvent (ev_t ev) {
       Serial.println(F("EV_REJOIN_FAILED"));
       break;
     case EV_TXCOMPLETE:
-      Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+      Serial.printf("EV_TXCOMPLETE (includes waiting for RX windows)\n");
       if (LMIC.txrxFlags & TXRX_ACK)
         Serial.println(F("Received ack"));
       if (LMIC.dataLen) {
-        Serial.println(F("Received "));
-        Serial.println(LMIC.dataLen);
-        Serial.println(F(" bytes of payload"));
+        Serial.printf("Received %d bytes of payload\n", LMIC.dataLen);
       }
       // Schedule next transmission
-      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), msg_send_to_ttn);
+      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(LORA_TX_INTERVAL), msg_send_to_ttn);
       break;
     case EV_LOST_TSYNC:
       Serial.println(F("EV_LOST_TSYNC"));
@@ -325,11 +363,13 @@ void onEvent (ev_t ev) {
   }
 }
 
+//-----------------------------------------------------------------------------
 void initGauge(roundrect_t rect) {
   display.drawRoundRect(rect.x, rect.y, rect.w, rect.h, rect.r, SSD1306_WHITE);
   display.display();
 }
 
+//-----------------------------------------------------------------------------
 void drawGauge(roundrect_t rect, char *text, textalign align) {
   int16_t sx, sy, text_x = rect.x+3;
   uint16_t sw, sh;

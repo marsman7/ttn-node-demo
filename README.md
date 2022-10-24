@@ -4,12 +4,11 @@ The Things Network - TTN-Node (Sensor) auf Basis des ESP32 TTGO LoRa32 OLED V1.
 
 https://github.com/LilyGO/TTGO-LORA32/tree/LilyGO-V1.3-868
 
-Bei diesem Beispiel kommet der "Activation Mode" ABP zum Einsatz, der aber aus Sicherheitsgründen nicht zu empfehlen ist.
+In der platformio.ini - Datei kann der "Activation Mode" zwischwn ABP und OTAA gewählt werden. Aus Sicherheitsgründen ist der ABP-Modus nicht zu empfehlen ist. (https://www.thethingsindustries.com/docs/devices/abp-vs-otaa/)
 In dieser Demo werden keine Sensoren verwendet. Um den Code so übersichtlich wie möglich zu halten werden fixe Werte an das TTN gesendet.
 
 ## Bibliothek
 
-https://github.com/mcci-catena/arduino-lorawan
 https://github.com/mcci-catena/arduino-lmic
 
 ## Daten Komprimieren
