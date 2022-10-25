@@ -105,7 +105,7 @@ roundrect_t humidityGauge =   {66 ,32 , 62, 14, 3};
 
 //-----------------------------------------------------------------------------
 void msg_send_to_ttn(osjob_t* j);
-void onEvent (ev_t ev);
+void onLoraEvent(void *pUserData, ev_t ev);
 void initGauge(roundrect_t rect);
 void drawGauge(roundrect_t rect, char *text, textalign align = ALIGN_LEFT);
 
@@ -204,6 +204,7 @@ void setup() {
   LMIC_setLinkCheckMode(0);     // Disable link check validation
   LMIC.dn2Dr = DR_SF9;          // TTN uses SF9 for its RX2 window.
   LMIC_setDrTxpow(DR_SF7, 16);  // Set data rate and transmit power for uplink
+  LMIC_registerEventCb(onLoraEvent, NULL);
 
 #ifndef OTAA
   // Start first message sending
@@ -268,7 +269,7 @@ void msg_send_to_ttn(osjob_t* j) {
 }
 
 //-----------------------------------------------------------------------------
-void onEvent (ev_t ev) {
+void onLoraEvent(void *pUserData, ev_t ev) {
   Serial.printf("%09d : ", os_getTime());
   switch (ev) {
     case EV_SCAN_TIMEOUT:
@@ -318,8 +319,8 @@ void onEvent (ev_t ev) {
       }
 #endif
       break;
-    case EV_JOIN_TXCOMPLETE:
-      Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
+    case EV_RFU1:
+      Serial.println(F("EV_RFU1"));
       break;
     case EV_JOIN_FAILED:
       Serial.println(F("EV_JOIN_FAILED"));
@@ -353,8 +354,20 @@ void onEvent (ev_t ev) {
     case EV_LINK_ALIVE:
       Serial.println(F("EV_LINK_ALIVE"));
       break;
+    case EV_SCAN_FOUND:
+      Serial.println(F("EV_SCAN_FOUND"));
+      break;
     case EV_TXSTART:
       Serial.println(F("EV_TXSTART"));
+      break;
+    case EV_TXCANCELED:
+      Serial.println(F("EV_TXCANCELED"));
+      break;
+    case EV_RXSTART:
+      Serial.println(F("EV_RXSTART"));
+      break;
+    case EV_JOIN_TXCOMPLETE:
+      Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
       break;
     default:
       Serial.print(F("Unknown event: "));
